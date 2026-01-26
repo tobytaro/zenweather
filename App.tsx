@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Sun, Cloud, CloudRain, Moon, Wind, Droplets, MapPin, Tablet, Loader2, ExternalLink, Sunrise, Sunset, Navigation, AlertCircle, Search, X, RefreshCw } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { WeatherData } from './types';
 import { ATMOSPHERIC_THEMES, MOCK_WEATHER } from './constants';
 import GrainOverlay from './components/GrainOverlay';
@@ -28,7 +28,12 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      const apiKey = process.env.API_KEY;
+      if (!apiKey) {
+        throw new Error("Configuration Error: API Key not detected in browser environment.");
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
       
       let locationQuery = "";
       if (lat !== undefined && lon !== undefined) {
@@ -39,53 +44,41 @@ const App: React.FC = () => {
         locationQuery = `for the user's current city`;
       }
 
-      const prompt = `Return the CURRENT weather ${locationQuery} as a RAW JSON object.
-      Use Google Search to get real-time accurate data.
-      
-      JSON format:
-      {
-        "temp": number (Celsius),
-        "condition": "clear" | "cloudy" | "rainy" | "night" | "hazy",
-        "location": "City, Country",
-        "windSpeed": number (km/h),
-        "humidity": number (%),
-        "precipitation": number (mm),
-        "sunrise": "HH:MM",
-        "sunset": "HH:MM"
-      }
-      
-      If it is currently dark at the location, condition MUST be "night". 
-      Do NOT include any text other than the JSON object.`;
+      const prompt = `Provide the current weather and atmospheric data ${locationQuery}. 
+      Use the Google Search tool to ensure real-time accuracy. 
+      If it is currently night time at the location, set condition to 'night'.`;
 
       const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
+        model: 'gemini-3-flash-preview',
         contents: prompt,
-        config: { 
-          tools: [{ googleSearch: {} }] 
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              temp: { type: Type.NUMBER, description: "Current temperature in Celsius" },
+              condition: { 
+                type: Type.STRING, 
+                enum: ['clear', 'cloudy', 'rainy', 'night', 'hazy'],
+                description: "Primary atmospheric condition"
+              },
+              location: { type: Type.STRING, description: "City and Country name" },
+              windSpeed: { type: Type.NUMBER, description: "Wind speed in km/h" },
+              humidity: { type: Type.NUMBER, description: "Humidity percentage" },
+              precipitation: { type: Type.NUMBER, description: "Precipitation in mm" },
+              sunrise: { type: Type.STRING, description: "Sunrise time in HH:MM format" },
+              sunset: { type: Type.STRING, description: "Sunset time in HH:MM format" }
+            },
+            required: ["temp", "condition", "location", "windSpeed", "humidity", "precipitation"]
+          }
         },
       });
 
-      const responseText = response.text || "";
-      
-      // Robust extraction: find the actual JSON boundaries
-      const firstBrace = responseText.indexOf('{');
-      const lastBrace = responseText.lastIndexOf('}');
-      
-      if (firstBrace !== -1 && lastBrace !== -1) {
-        const jsonString = responseText.substring(firstBrace, lastBrace + 1);
-        const data = JSON.parse(jsonString) as WeatherData;
-        
-        // Basic validation
-        if (typeof data.temp === 'number' && data.location) {
-          setWeather(data);
-          setShowSearch(false);
-          setManualSearch('');
-        } else {
-          throw new Error("Data missing required fields");
-        }
-      } else {
-        throw new Error("No JSON block found in response");
-      }
+      const data = JSON.parse(response.text) as WeatherData;
+      setWeather(data);
+      setShowSearch(false);
+      setManualSearch('');
 
       // Extract grounding sources
       const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
@@ -100,10 +93,12 @@ const App: React.FC = () => {
 
     } catch (err: any) {
       console.error("Atmospheric sync error:", err);
-      setError("Atmospheric sync failed. Try a manual search.");
-      // Fallback to mock only if we have nothing at all
+      const isConfigError = err.message?.includes("Configuration");
+      setError(isConfigError ? "Sync restricted. Use manual mode." : "Atmospheric sync failed.");
+      
       if (!weather) setWeather(MOCK_WEATHER.current);
-      setShowSearch(true);
+      // If it's not a key error, help them recover with manual search
+      if (!isConfigError) setShowSearch(true);
     } finally {
       setIsLoading(false);
       setIsLocating(false);
@@ -115,7 +110,7 @@ const App: React.FC = () => {
     setError(null);
     
     const geoOptions = {
-      timeout: 8000,
+      timeout: 6000,
       enableHighAccuracy: true,
       maximumAge: 0
     };
@@ -126,27 +121,18 @@ const App: React.FC = () => {
           fetchWeather(pos.coords.latitude, pos.coords.longitude);
         },
         async (geoErr) => {
-          console.warn("Geolocation failed, trying IP fallbacks...", geoErr.message);
+          console.warn("Geolocation fallback triggered:", geoErr.message);
           try {
-            // Try Service 1
-            const res1 = await fetch('https://ip-api.com/json/');
-            const data1 = await res1.json();
-            if (data1.city) {
-              fetchWeather(undefined, undefined, `${data1.city}, ${data1.country}`);
+            // Try IP-based location services
+            const res = await fetch('https://ip-api.com/json/');
+            const data = await res.json();
+            if (data.city) {
+              fetchWeather(undefined, undefined, `${data.city}, ${data.country}`);
               return;
             }
-            
-            // Try Service 2
-            const res2 = await fetch('https://ipapi.co/json/');
-            const data2 = await res2.json();
-            if (data2.city) {
-              fetchWeather(undefined, undefined, data2.city);
-              return;
-            }
-
-            throw new Error("All IP lookups failed");
-          } catch (ipErr) {
-            setError("Could not determine location. Please enter it manually.");
+            throw new Error("IP Lookup failed");
+          } catch {
+            setError("Location unavailable. Please search manually.");
             setIsLocating(false);
             setIsLoading(false);
             setShowSearch(true);
@@ -190,7 +176,7 @@ const App: React.FC = () => {
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-stone-50 text-stone-400 font-light tracking-[0.2em]">
         <Loader2 className="animate-spin mb-4" size={32} strokeWidth={1} />
         <p className="text-[10px] uppercase tracking-[0.3em] animate-pulse">
-          {isLocating ? 'Synchronizing Location...' : 'Connecting to Atmo...'}
+          {isLocating ? 'Determining Coordinates...' : 'Syncing Atmosphere...'}
         </p>
       </div>
     );
@@ -220,7 +206,7 @@ const App: React.FC = () => {
         <div className="flex flex-col gap-1">
           <button 
             onClick={() => setShowSearch(!showSearch)} 
-            className="flex items-center gap-2 group text-left"
+            className="flex items-center gap-2 group text-left outline-none"
           >
             <MapPin size={12} strokeWidth={1} className="opacity-60 group-hover:opacity-100 transition-opacity" />
             <span className="text-[10px] md:text-xs uppercase tracking-[0.3em] font-light opacity-60 group-hover:opacity-100 transition-opacity">
@@ -269,13 +255,13 @@ const App: React.FC = () => {
                 <input 
                   autoFocus
                   type="text"
-                  placeholder="Where are you?"
+                  placeholder="Enter City..."
                   value={manualSearch}
                   onChange={(e) => setManualSearch(e.target.value)}
                   className="bg-transparent border-none outline-none flex-grow text-sm uppercase tracking-widest placeholder:opacity-30"
                 />
                 {manualSearch.trim() && (
-                  <button type="submit" className="text-[10px] font-bold uppercase tracking-[0.2em] px-3 py-1 bg-current text-white rounded-full">
+                  <button type="submit" className="text-[10px] font-bold uppercase tracking-[0.2em] px-4 py-1 bg-current text-white rounded-full">
                     Sync
                   </button>
                 )}
@@ -293,7 +279,6 @@ const App: React.FC = () => {
               key={activeWeather.condition}
               initial={{ scale: 0.85, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              transition={{ type: 'spring', damping: 20 }}
               className="mb-8 md:mb-10 opacity-80"
             >
               {activeWeather.condition === 'clear' && <Sun size={80} strokeWidth={0.5} />}
@@ -320,7 +305,7 @@ const App: React.FC = () => {
             </div>
 
             <p className={`mt-10 text-lg md:text-2xl max-w-sm opacity-70 ${isEink ? 'font-serif italic' : 'font-light'}`}>
-              The air feels {activeWeather.temp > 22 ? 'warm' : activeWeather.temp < 15 ? 'chilly' : 'pleasant'} today in {activeWeather.location.split(',')[0]}.
+              The air feels {activeWeather.temp > 22 ? 'warm' : activeWeather.temp < 15 ? 'chilly' : 'pleasant'} in {activeWeather.location.split(',')[0]}.
             </p>
           </section>
 
@@ -342,7 +327,7 @@ const App: React.FC = () => {
             <a key={idx} href={source.uri} target="_blank" className="hover:underline flex items-center gap-1 whitespace-nowrap">
               {source.title.toUpperCase()} <ExternalLink size={8} />
             </a>
-          )) : <span>Source Grounded by Atmo AI</span>}
+          )) : <span>Atmospheric Grounding Active</span>}
         </div>
         <div className="flex gap-4 items-center whitespace-nowrap">
           {error && (
@@ -350,8 +335,8 @@ const App: React.FC = () => {
               <AlertCircle size={10}/> {error}
             </button>
           )}
-          {!error && isLoading && <span className="flex items-center gap-2"><RefreshCw size={10} className="animate-spin"/> Syncing...</span>}
-          <span>v1.3.5 // Zen Core Engine</span>
+          {!error && isLoading && <span className="flex items-center gap-2 opacity-80"><RefreshCw size={10} className="animate-spin"/> Syncing...</span>}
+          <span>v1.5.0 // Zen Core</span>
         </div>
       </footer>
     </div>
