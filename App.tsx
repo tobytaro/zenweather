@@ -27,7 +27,7 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const apiKey = process.env.VITE_GEMINI_API_KEY;
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
       if (!apiKey) throw new Error("API_KEY_MISSING");
       
       const ai = new GoogleGenAI({ apiKey });
