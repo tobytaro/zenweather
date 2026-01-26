@@ -8,6 +8,9 @@ import GrainOverlay from './components/GrainOverlay';
 import TennisIndex from './components/TennisIndex';
 import WeatherAnimations from './components/WeatherAnimations';
 
+// User provided key
+const HARDCODED_API_KEY = 'gen-lang-client-0702424478';
+
 const App: React.FC = () => {
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [isEink, setIsEink] = useState<boolean>(false);
@@ -28,12 +31,8 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const apiKey = process.env.API_KEY;
-      if (!apiKey) {
-        throw new Error("Configuration Error: API Key not detected in browser environment.");
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
+      // Create AI instance with hardcoded key
+      const ai = new GoogleGenAI({ apiKey: HARDCODED_API_KEY });
       
       let locationQuery = "";
       if (lat !== undefined && lon !== undefined) {
@@ -93,12 +92,15 @@ const App: React.FC = () => {
 
     } catch (err: any) {
       console.error("Atmospheric sync error:", err);
-      const isConfigError = err.message?.includes("Configuration");
-      setError(isConfigError ? "Sync restricted. Use manual mode." : "Atmospheric sync failed.");
+      // More specific error handling for the hardcoded key
+      if (err.message?.includes("API_KEY_INVALID") || err.message?.includes("not found")) {
+        setError("Invalid Key: Please check your Gemini API key.");
+      } else {
+        setError("Atmospheric sync failed. Try manual search.");
+      }
       
       if (!weather) setWeather(MOCK_WEATHER.current);
-      // If it's not a key error, help them recover with manual search
-      if (!isConfigError) setShowSearch(true);
+      setShowSearch(true);
     } finally {
       setIsLoading(false);
       setIsLocating(false);
@@ -123,7 +125,6 @@ const App: React.FC = () => {
         async (geoErr) => {
           console.warn("Geolocation fallback triggered:", geoErr.message);
           try {
-            // Try IP-based location services
             const res = await fetch('https://ip-api.com/json/');
             const data = await res.json();
             if (data.city) {
@@ -336,7 +337,7 @@ const App: React.FC = () => {
             </button>
           )}
           {!error && isLoading && <span className="flex items-center gap-2 opacity-80"><RefreshCw size={10} className="animate-spin"/> Syncing...</span>}
-          <span>v1.5.0 // Zen Core</span>
+          <span>v1.5.1 // Zen Core</span>
         </div>
       </footer>
     </div>
