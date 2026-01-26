@@ -9,32 +9,49 @@ interface TennisIndexProps {
 }
 
 const TennisIndex: React.FC<TennisIndexProps> = ({ weather, isEink }) => {
-  const getTennisVerdict = () => {
+  const getTennisData = () => {
     const { windSpeed, temp, precipitation } = weather;
-    if (precipitation > 0) return { status: "Courts likely wet", advice: "Avoid play. Risk of injury.", score: "Poor" };
-    if (windSpeed > 20) return { status: "High winds", advice: "Focus on slice and footwork.", score: "Challenging" };
-    if (temp >= 15 && temp <= 25 && windSpeed < 10) return { status: "Perfect Conditions", advice: "Ideal for baseline rallies.", score: "Elite" };
-    return { status: "Playable", advice: "Solid conditions for a hit.", score: "Good" };
+    if (precipitation > 0) return { status: "Courts Wet", score: 20, color: 'bg-red-400' };
+    if (windSpeed > 25) return { status: "Too Windy", score: 40, color: 'bg-amber-400' };
+    if (temp < 10 || temp > 35) return { status: "Extreme Temp", score: 50, color: 'bg-amber-400' };
+    if (temp >= 18 && temp <= 24 && windSpeed < 10) return { status: "Elite Play", score: 100, color: 'bg-emerald-400' };
+    return { status: "Good Play", score: 80, color: 'bg-emerald-300' };
   };
 
-  const verdict = getTennisVerdict();
+  const data = getTennisData();
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`p-6 rounded-2xl border transition-all duration-700
-        ${isEink ? 'bg-white border-black text-black border-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'bg-white/10 border-white/20 text-current'}`}
+      className={`p-8 rounded-[2.5rem] border transition-all duration-700
+        ${isEink ? 'bg-white border-black text-black border-2' : 'bg-white/5 border-white/5'}`}
     >
-      <div className="flex items-center gap-2 mb-4">
-        <Target size={18} strokeWidth={1} />
-        <span className="text-xs uppercase tracking-[0.2em] font-light">Tennis Index</span>
+      <div className="flex justify-between items-center mb-6">
+        <div className="flex items-center gap-3">
+          <Target size={16} strokeWidth={1} className="opacity-40" />
+          <span className="text-[9px] uppercase tracking-[0.4em] font-medium opacity-40">Tennis Index</span>
+        </div>
+        <span className={`text-[10px] font-bold uppercase tracking-[0.2em] ${isEink ? '' : 'opacity-60'}`}>
+          {data.status}
+        </span>
       </div>
-      <h3 className={`text-2xl font-light mb-1 ${isEink ? 'font-serif italic font-bold' : ''}`}>{verdict.status}</h3>
-      <p className="text-sm opacity-80 leading-relaxed font-light">{verdict.advice}</p>
-      <div className="mt-4 pt-4 border-t border-current/10 flex justify-between items-center">
-        <span className="text-[10px] uppercase tracking-widest opacity-60">Verdict Score</span>
-        <span className={`text-sm ${isEink ? 'font-bold underline' : 'font-medium'}`}>{verdict.score}</span>
+
+      <div className="space-y-4">
+        <div className="h-[2px] w-full bg-current/10 relative overflow-hidden">
+          <motion.div 
+            initial={{ width: 0 }}
+            animate={{ width: `${data.score}%` }}
+            transition={{ duration: 1.5, ease: "circOut" }}
+            className={`absolute inset-y-0 left-0 ${isEink ? 'bg-black' : data.color}`}
+          />
+        </div>
+        <div className="flex justify-between items-end">
+          <p className={`text-3xl ${isEink ? 'font-serif font-black italic' : 'font-[200]'} tracking-tight`}>
+            {data.score === 100 ? 'Perfect' : data.score >= 80 ? 'Solid' : 'Poor'}
+          </p>
+          <span className="text-[10px] opacity-30 uppercase tracking-widest pb-1">Court Sync 100%</span>
+        </div>
       </div>
     </motion.div>
   );
