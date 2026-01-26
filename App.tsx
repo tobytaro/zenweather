@@ -27,10 +27,12 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
+      // Use the injected API key directly.
       const apiKey = process.env.API_KEY;
       
-      if (!apiKey) {
-        throw new Error("CONFIG_MISSING");
+      // Verification for the user to debug environment setup
+      if (!apiKey || apiKey === 'undefined' || apiKey === 'null' || apiKey === '') {
+        throw new Error("MISSING_API_KEY");
       }
 
       const ai = new GoogleGenAI({ apiKey });
@@ -93,12 +95,10 @@ const App: React.FC = () => {
 
     } catch (err: any) {
       console.error("Atmospheric sync error:", err);
-      if (err.message === "CONFIG_MISSING") {
-        setError("Sync Paused: API Key missing in environment.");
-      } else if (err.message?.includes("403") || err.message?.includes("400") || err.message?.includes("API_KEY_INVALID")) {
-        setError("Invalid Key: Check your Gemini API Key.");
+      if (err.message === "MISSING_API_KEY") {
+        setError("API_KEY not detected. Ensure it is set in your Cloudflare environment and that you have triggered a fresh deployment.");
       } else {
-        setError(err.message || "Atmospheric sync failed.");
+        setError(err.message || "Sync failed.");
       }
       
       if (!weather) setWeather(MOCK_WEATHER.current);
@@ -161,17 +161,20 @@ const App: React.FC = () => {
     if (manualSearch.trim()) fetchWeather(undefined, undefined, manualSearch.trim());
   };
 
-  if (error && (error.includes("missing") || error.includes("Invalid Key")) && !weather) {
+  // Dedicated error screen for configuration issues
+  if (error && error.includes("API_KEY not detected") && !weather) {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#FDFCFB] text-stone-600 p-12 text-center">
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="max-w-md flex flex-col items-center">
           <Key className="mb-8 opacity-20" size={48} strokeWidth={1} />
-          <h2 className="text-2xl font-light tracking-tight mb-4">Sync Required</h2>
+          <h2 className="text-2xl font-light tracking-tight mb-4">Sync Interrupted</h2>
           <p className="text-sm font-light opacity-60 leading-relaxed mb-8 uppercase tracking-[0.2em]">
-            Atmo needs a Gemini API Key to synchronize with the current atmosphere.
+            The environment variable <code className="bg-stone-100 px-2 py-1 rounded">API_KEY</code> is missing. Cloudflare requires a <strong>new deployment</strong> after saving changes to environment variables.
           </p>
-          <div className="p-4 bg-red-50 text-red-800 rounded-xl text-[10px] uppercase tracking-widest font-bold flex items-center gap-3">
-             <AlertCircle size={14} /> {error}
+          <div className="p-5 bg-stone-100 rounded-2xl text-[10px] uppercase tracking-widest font-bold flex flex-col items-center gap-3 w-full">
+             <div className="flex items-center gap-2">
+               <AlertCircle size={14} className="text-red-500" /> <span>Deployment required</span>
+             </div>
           </div>
           <button onClick={() => window.location.reload()} className="mt-12 p-3 rounded-full border border-stone-200 hover:bg-stone-50 transition-all">
             <RefreshCw size={18} strokeWidth={1.5} className="opacity-40" />
@@ -212,11 +215,11 @@ const App: React.FC = () => {
 
       <header className="relative z-10 p-8 md:p-12 flex justify-between items-start w-full">
         <div className="flex flex-col items-start text-left">
-          <span className="text-[9px] uppercase tracking-[0.4em] opacity-30 font-bold mb-1">
+          <span className="text-[9px] uppercase tracking-[0.5em] opacity-30 font-bold mb-2">
             Location
           </span>
           <button onClick={() => setShowSearch(!showSearch)} className="group outline-none text-left">
-            <span className="text-[11px] md:text-[13px] uppercase tracking-[0.25em] font-medium opacity-60 group-hover:opacity-100 transition-opacity flex items-center gap-2">
+            <span className="text-[12px] md:text-[14px] uppercase tracking-[0.3em] font-medium opacity-60 group-hover:opacity-100 transition-opacity">
               {activeWeather.location}
             </span>
           </button>
@@ -224,31 +227,31 @@ const App: React.FC = () => {
 
         <div className="flex gap-4">
           <HeaderAction onClick={() => setShowSearch(!showSearch)} active={showSearch} isEink={isEink}>
-            <Search size={16} strokeWidth={1.5} />
+            <Search size={18} strokeWidth={1.5} />
           </HeaderAction>
           <HeaderAction onClick={handleLocate} disabled={isLocating} isEink={isEink}>
-            <Navigation size={16} strokeWidth={1.5} className={isLocating ? 'animate-pulse' : ''} />
+            <Navigation size={18} strokeWidth={1.5} className={isLocating ? 'animate-pulse' : ''} />
           </HeaderAction>
           <HeaderAction onClick={() => setIsEink(!isEink)} active={isEink} isEink={isEink}>
-            <Tablet size={16} strokeWidth={1.5} />
+            <Tablet size={18} strokeWidth={1.5} />
           </HeaderAction>
         </div>
       </header>
 
-      <main className="relative z-10 flex-grow flex flex-col items-center justify-center px-8 py-4">
+      <main className="relative z-10 flex-grow flex flex-col items-center justify-center px-10 py-6">
         <AnimatePresence>
           {showSearch && (
-            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="w-full max-w-sm mb-12">
+            <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="w-full max-w-sm mb-16">
               <form onSubmit={handleManualSearch} className="flex gap-3 border-b border-current/20 pb-3 items-center">
                 <input 
                   autoFocus
                   type="text"
-                  placeholder="SYNC LOCATION..."
+                  placeholder="SEARCH LOCATION..."
                   value={manualSearch}
                   onChange={(e) => setManualSearch(e.target.value)}
-                  className="bg-transparent border-none outline-none flex-grow text-[10px] uppercase tracking-[0.3em] placeholder:opacity-20"
+                  className="bg-transparent border-none outline-none flex-grow text-[10px] uppercase tracking-[0.4em] placeholder:opacity-20"
                 />
-                <button type="submit" className="opacity-40 hover:opacity-100"><Search size={14}/></button>
+                <button type="submit" className="opacity-40 hover:opacity-100"><Search size={16}/></button>
               </form>
             </motion.div>
           )}
@@ -256,7 +259,7 @@ const App: React.FC = () => {
 
         <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-16 lg:gap-32 items-center">
           <section className="flex flex-col items-center lg:items-start text-center lg:text-left">
-            <motion.div key={activeWeather.condition} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 0.6, scale: 1 }} className="mb-6">
+            <motion.div key={activeWeather.condition} initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 0.6, scale: 1 }} className="mb-8">
               <WeatherIcon condition={activeWeather.condition} />
             </motion.div>
 
@@ -265,27 +268,27 @@ const App: React.FC = () => {
                 key={activeWeather.temp}
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`text-[10rem] md:text-[14rem] leading-[0.75] tracking-tighter ${isEink ? 'font-serif font-black' : 'font-[100]'}`}
+                className={`text-[12rem] md:text-[16rem] leading-[0.7] tracking-tighter ${isEink ? 'font-serif font-black' : 'font-[100]'}`}
               >
                 {Math.round(activeWeather.temp)}°
               </motion.h2>
             </div>
 
-            <div className="mt-12 flex flex-col items-center lg:items-start">
-              <span className="text-[10px] uppercase tracking-[0.6em] opacity-25 font-bold mb-3">Atmosphere</span>
-              <h3 className={`text-4xl md:text-6xl ${isEink ? 'font-serif font-black italic' : 'font-[200]'} tracking-widest uppercase`}>
+            <div className="mt-16 flex flex-col items-center lg:items-start">
+              <span className="text-[10px] uppercase tracking-[0.8em] opacity-25 font-bold mb-4">Atmosphere</span>
+              <h3 className={`text-5xl md:text-7xl ${isEink ? 'font-serif font-black italic' : 'font-[200]'} tracking-[0.2em] uppercase`}>
                 {activeWeather.condition === 'night' ? 'Clear Night' : activeWeather.condition}
               </h3>
             </div>
 
-            <p className={`mt-10 text-xl md:text-2xl max-w-sm opacity-40 leading-relaxed ${isEink ? 'font-serif italic font-medium' : 'font-light'}`}>
+            <p className={`mt-12 text-xl md:text-2xl max-w-md opacity-40 leading-relaxed ${isEink ? 'font-serif italic font-medium' : 'font-light'}`}>
               It's a {activeWeather.condition === 'night' ? 'calm night' : `${activeWeather.condition} sky`} in {activeWeather.location.split(',')[0]}.
             </p>
           </section>
 
-          <section className="flex flex-col gap-10 w-full max-w-md mx-auto lg:mx-0">
+          <section className="flex flex-col gap-12 w-full max-w-md mx-auto lg:mx-0">
             <TennisIndex weather={activeWeather} isEink={isEink} />
-            <div className="grid grid-cols-2 gap-6">
+            <div className="grid grid-cols-2 gap-8">
               <StatCard label="Wind" value={`${activeWeather.windSpeed} km/h`} isEink={isEink} />
               <StatCard label="Humidity" value={`${activeWeather.humidity}%`} isEink={isEink} />
               <StatCard label="Sunrise" value={activeWeather.sunrise || "--:--"} isEink={isEink} />
@@ -295,23 +298,23 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      <footer className="relative z-10 p-8 md:p-12 flex flex-col md:flex-row justify-between items-center gap-6">
+      <footer className="relative z-10 p-10 md:p-12 flex flex-col md:flex-row justify-between items-center gap-8">
         <div className="flex gap-4 items-center">
           {sources.length > 0 ? (
-            <a href={sources[0].uri} target="_blank" className="text-[10px] uppercase tracking-[0.3em] opacity-30 hover:opacity-100 flex items-center gap-2 transition-opacity">
-              {sources[0].title.slice(0, 20)}... <ExternalLink size={10} />
+            <a href={sources[0].uri} target="_blank" className="text-[10px] uppercase tracking-[0.4em] opacity-30 hover:opacity-100 flex items-center gap-2 transition-opacity">
+              {sources[0].title.slice(0, 25)}... <ExternalLink size={12} />
             </a>
-          ) : <span className="text-[10px] uppercase tracking-[0.3em] opacity-20">Grounding Synchronized</span>}
+          ) : <span className="text-[10px] uppercase tracking-[0.4em] opacity-20">Grounding Active</span>}
         </div>
         
-        <div className="flex gap-8 items-center">
+        <div className="flex gap-10 items-center">
           {error && (
-            <div className="flex items-center gap-2 text-red-500 text-[10px] uppercase tracking-[0.2em] font-bold">
-              <AlertCircle size={10} /> {error}
+            <div className="flex items-center gap-2 text-red-500 text-[10px] uppercase tracking-[0.3em] font-bold">
+              <AlertCircle size={12} /> {error}
             </div>
           )}
-          {!error && isLoading && <div className="flex items-center gap-2 opacity-30 text-[10px] uppercase tracking-[0.4em]"><RefreshCw size={10} className="animate-spin" /> Syncing</div>}
-          <span className="text-[10px] uppercase tracking-[0.5em] opacity-10 whitespace-nowrap">Zen Core v1.6.0</span>
+          {!error && isLoading && <div className="flex items-center gap-2 opacity-30 text-[10px] uppercase tracking-[0.5em]"><RefreshCw size={12} className="animate-spin" /> Syncing</div>}
+          <span className="text-[10px] uppercase tracking-[0.6em] opacity-10 whitespace-nowrap">Zen Core v1.7.0</span>
         </div>
       </footer>
     </div>
@@ -330,7 +333,7 @@ const HeaderAction: React.FC<{ children: React.ReactNode, onClick: () => void, a
 );
 
 const WeatherIcon: React.FC<{ condition: string }> = ({ condition }) => {
-  const props = { size: 64, strokeWidth: 0.5 };
+  const props = { size: 72, strokeWidth: 0.5 };
   switch(condition) {
     case 'clear': return <Sun {...props} />;
     case 'cloudy': return <Cloud {...props} />;
@@ -341,10 +344,10 @@ const WeatherIcon: React.FC<{ condition: string }> = ({ condition }) => {
 };
 
 const StatCard: React.FC<{ label: string, value: string, isEink: boolean }> = ({ label, value, isEink }) => (
-  <div className={`p-8 rounded-[2rem] border transition-all duration-500
+  <div className={`p-10 rounded-[2.5rem] border transition-all duration-500
     ${isEink ? 'bg-white border-black text-black border-2' : 'bg-white/5 border-white/5 hover:border-white/10'}`}>
-    <p className="text-[9px] uppercase tracking-[0.4em] opacity-30 mb-3 font-bold">{label}</p>
-    <p className={`text-xl ${isEink ? 'font-serif font-black' : 'font-light'}`}>{value}</p>
+    <p className="text-[10px] uppercase tracking-[0.5em] opacity-30 mb-4 font-bold">{label}</p>
+    <p className={`text-2xl ${isEink ? 'font-serif font-black' : 'font-light'}`}>{value}</p>
   </div>
 );
 
