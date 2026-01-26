@@ -1,0 +1,7 @@
+{
+  "name": "Atmo - Zen Weather",
+  "description": "A weather application prioritized on mood and atmosphere, featuring dynamic gradients, an e-ink mode, and a specialized tennis playability index.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
