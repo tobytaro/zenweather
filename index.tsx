@@ -10,9 +10,9 @@ import { GoogleGenAI } from "@google/genai";
 
 // --- TYPES ---
 
-type WeatherCondition = 'clear' | 'cloudy' | 'rainy' | 'night' | 'hazy';
+export type WeatherCondition = 'clear' | 'cloudy' | 'rainy' | 'night' | 'hazy';
 
-interface WeatherData {
+export interface WeatherData {
   temp: number;
   condition: WeatherCondition;
   location: string;
@@ -33,10 +33,10 @@ const ATMOSPHERIC_THEMES: Record<WeatherCondition, { gradient: string; text: str
   hazy: { gradient: 'from-[#8e9eab] to-[#eef2f3]', text: 'text-slate-700' }
 };
 
-const MOCK_WEATHER: WeatherData = {
+const MOCK_WEATHER = {
   temp: 20,
-  condition: 'clear',
-  location: 'Calibrating...',
+  condition: 'clear' as WeatherCondition,
+  location: 'Sensing Atmosphere...',
   windSpeed: 5,
   humidity: 50,
   precipitation: 0,
@@ -168,37 +168,14 @@ const App: React.FC = () => {
     return () => clearInterval(timer);
   }, []);
 
-  const fetchWeather = useCallback(async (lat?: number, lon?: number, cityHint?: string) => {
+  const fetchWeather = useCallback(async (locationHint?: string, lat?: number, lon?: number) => {
     setIsLoading(true);
     setError(null);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+      let locationContext = lat && lon ? `at exactly: Latitude ${lat}, Longitude ${lon}. Find the nearest city.` : locationHint ? `in ${locationHint}.` : `for the user's current city.`;
       
-      // We force the AI to respect the coordinates if they exist
-      let locationQuery = "";
-      if (lat && lon) {
-        locationQuery = `at geographic coordinates: Latitude ${lat}, Longitude ${lon}. Identify the exact city and region for these specific coordinates.`;
-      } else if (cityHint) {
-        locationQuery = `in the city of ${cityHint}.`;
-      } else {
-        locationQuery = `for the user's current city based on their internet connection context.`;
-      }
-
-      const prompt = `Task: Provide current local weather data ${locationQuery}. 
-      CRITICAL: Do NOT default to Basel, Switzerland. Find the user's actual location using Google Search.
-      Return the data strictly as a JSON object:
-      {
-        "temp": number (Celsius),
-        "condition": "clear" | "cloudy" | "rainy" | "night" | "hazy",
-        "location": "City, Country",
-        "windSpeed": number (km/h),
-        "humidity": number (percentage),
-        "precipitation": number (mm),
-        "sunrise": "HH:MM",
-        "sunset": "HH:MM"
-      }
-      If it is currently after sunset or before sunrise at that location, set condition to "night".
-      Return ONLY the JSON.`;
+      const prompt = `Find current weather ${locationContext}. Use Google Search. Return JSON: { "temp": number, "condition": "clear"|"cloudy"|"rainy"|"night"|"hazy", "location": "City, Country", "windSpeed": number, "humidity": number, "precipitation": number, "sunrise": "HH:MM", "sunset": "HH:MM" }. Set condition to "night" if currently dark. IMPORTANT: Avoid defaulting to Basel, Switzerland. Only return JSON.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -209,19 +186,15 @@ const App: React.FC = () => {
       const text = response.text || "";
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const data = JSON.parse(jsonMatch[0]) as WeatherData;
-        setWeather(data);
+        setWeather(JSON.parse(jsonMatch[0]));
       } else {
-        throw new Error("Invalid atmospheric data.");
+        throw new Error("Data error");
       }
 
       const chunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
-      if (chunks) {
-        setSources(chunks.filter((c: any) => c.web).map((c: any) => ({ title: c.web.title, uri: c.web.uri })));
-      }
+      if (chunks) setSources(chunks.filter((c: any) => c.web).map((c: any) => ({ title: c.web.title, uri: c.web.uri })));
     } catch (err) {
-      console.error("Fetch Error:", err);
-      setError("Atmospheric sync interrupted.");
+      setError("Atmospheric sync error");
       if (!weather) setWeather(MOCK_WEATHER);
     } finally {
       setIsLoading(false);
@@ -233,36 +206,20 @@ const App: React.FC = () => {
     setIsLocating(true);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (p) => {
-          // Precise GPS coordinates acquired
-          fetchWeather(p.coords.latitude, p.coords.longitude);
-        },
-        async (err) => {
-          console.warn("Geolocation denied/failed. Using IP fallback.", err.message);
+        (p) => fetchWeather(undefined, p.coords.latitude, p.coords.longitude),
+        async () => {
           try {
-            // Fallback to IP-based location to avoid server-side Basel default
-            const res = await fetch('https://ipapi.co/json/');
-            const data = await res.json();
-            if (data.city) {
-              fetchWeather(undefined, undefined, `${data.city}, ${data.country_name}`);
-            } else {
-              fetchWeather(); // Generic search
-            }
-          } catch {
-            fetchWeather(); // Last resort AI search
-          }
+            const r = await fetch('https://ipapi.co/json/');
+            const d = await r.json();
+            d.city ? fetchWeather(`${d.city}, ${d.country_name}`) : fetchWeather();
+          } catch { fetchWeather(); }
         },
         { timeout: 10000, enableHighAccuracy: true }
       );
-    } else {
-      fetchWeather();
-    }
+    } else { fetchWeather(); }
   }, [fetchWeather]);
 
-  // Initial load - try to get precise location
-  useEffect(() => {
-    handleLocate();
-  }, []);
+  useEffect(() => { handleLocate(); }, []);
 
   const activeWeather = weather || MOCK_WEATHER;
   const isDaytime = useMemo(() => {
@@ -279,9 +236,7 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-stone-50 text-stone-400 font-light tracking-[0.2em]">
         <Loader2 className="animate-spin mb-4" size={32} strokeWidth={1} />
-        <p className="text-[10px] uppercase tracking-[0.3em] px-12 text-center">
-          {isLocating ? "Awaiting coordinates..." : "Sensing Atmosphere..."}
-        </p>
+        <p className="text-xs uppercase tracking-[0.3em]">{isLocating ? "Locating..." : "Sensing..."}</p>
       </div>
     );
   }
@@ -289,14 +244,7 @@ const App: React.FC = () => {
   return (
     <div className={`relative min-h-screen w-full transition-colors duration-1000 flex flex-col overflow-x-hidden ${theme.text}`}>
       <AnimatePresence mode="wait">
-        <motion.div 
-          key={isEink ? 'eink' : `${activeWeather.condition}-${isDaytime}`} 
-          initial={{ opacity: 0 }} 
-          animate={{ opacity: 1 }} 
-          exit={{ opacity: 0 }} 
-          transition={{ duration: 1.5 }} 
-          className={`fixed inset-0 z-0 bg-gradient-to-br ${theme.gradient}`} 
-        />
+        <motion.div key={isEink ? 'eink' : `${activeWeather.condition}-${isDaytime}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 1.5 }} className={`fixed inset-0 z-0 bg-gradient-to-br ${theme.gradient}`} />
       </AnimatePresence>
       <WeatherAnimations condition={!isDaytime && activeWeather.condition === 'clear' ? 'night' : activeWeather.condition} isEink={isEink} />
       <GrainOverlay />
@@ -309,19 +257,8 @@ const App: React.FC = () => {
           <h1 className={`text-lg md:text-xl tracking-tight ${isEink ? 'font-serif italic font-bold' : 'font-light'}`}>Atmo.</h1>
         </div>
         <div className="flex gap-2">
-          <button 
-            onClick={handleLocate} 
-            disabled={isLocating}
-            className={`p-2 rounded-full border transition-all ${isEink ? 'border-black hover:bg-black hover:text-white' : 'border-current/20 hover:bg-white/10'}`}
-          >
-            <Navigation size={18} strokeWidth={1} className={isLocating ? 'animate-pulse' : ''} />
-          </button>
-          <button 
-            onClick={() => setIsEink(!isEink)} 
-            className={`p-2 rounded-full border transition-all ${isEink ? 'bg-black text-white' : 'border-current/20 hover:bg-white/10'}`}
-          >
-            <Tablet size={18} strokeWidth={1} />
-          </button>
+          <button onClick={handleLocate} className={`p-2 rounded-full border ${isEink ? 'border-black' : 'border-current/20'}`} disabled={isLocating}><Navigation size={18} strokeWidth={1} /></button>
+          <button onClick={() => setIsEink(!isEink)} className={`p-2 rounded-full border ${isEink ? 'bg-black text-white' : 'border-current/20'}`}><Tablet size={18} strokeWidth={1} /></button>
         </div>
       </header>
       <main className="relative z-10 flex-grow flex flex-col items-center justify-center px-6 py-8">
@@ -336,13 +273,11 @@ const App: React.FC = () => {
             </div>
             <div className="relative inline-block">
               <h2 className={`text-[8rem] sm:text-[10rem] md:text-[14rem] leading-[0.8] tracking-tighter ${isEink ? 'font-serif font-black' : 'font-[100]'}`}>{activeWeather.temp}°</h2>
-              <div className="absolute -top-12 md:-top-16 right-[-45px] md:right-[-85px]">
+              <div className="absolute -top-12 md:-top-16 right-[-50px] md:right-[-90px]">
                 <span className={`text-sm md:text-xl uppercase tracking-[0.4em] opacity-40 ${isEink ? 'font-bold' : 'font-light'}`}>{activeWeather.condition}</span>
               </div>
             </div>
-            <p className={`mt-8 text-base md:text-xl max-w-sm opacity-70 ${isEink ? 'font-serif italic' : 'font-light'}`}>
-              The air feels {activeWeather.temp > 20 ? 'warm' : 'crisp'} in {activeWeather.location.split(',')[0]}.
-            </p>
+            <p className={`mt-8 text-base md:text-xl max-w-sm opacity-70 ${isEink ? 'font-serif italic' : 'font-light'}`}>The air feels {activeWeather.temp > 20 ? 'warm' : 'crisp'} in {activeWeather.location.split(',')[0]}.</p>
           </section>
           <section className="flex flex-col gap-6 w-full">
             <TennisIndex weather={activeWeather} isEink={isEink} />
@@ -356,17 +291,8 @@ const App: React.FC = () => {
         </div>
       </main>
       <footer className="relative z-10 p-6 md:p-12 flex flex-col md:flex-row justify-between items-center opacity-40 text-[8px] uppercase tracking-[0.4em] font-light gap-4">
-        <div className="flex gap-4">
-          {sources.slice(0, 2).map((s, i) => (
-            <a key={i} href={s.uri} target="_blank" className="hover:underline flex items-center gap-1">
-              {s.title.toUpperCase()} <ExternalLink size={6} />
-            </a>
-          ))}
-        </div>
-        <div className="flex gap-4">
-          <span>{error && <span className="text-red-400 font-bold">{error}</span>}</span>
-          <span>Atmo // Zen Atmosphere Engine v1.4.1</span>
-        </div>
+        <div className="flex gap-4">{sources.slice(0, 2).map((s, i) => (<a key={i} href={s.uri} target="_blank" className="hover:underline">{s.title.toUpperCase()}</a>))}</div>
+        <div className="flex gap-4"><span>{error && `(!) ${error}`}</span><span>Atmo // Zen v1.3.0</span></div>
       </footer>
     </div>
   );
