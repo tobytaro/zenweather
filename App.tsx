@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sun, Cloud, CloudRain, Moon, Wind, Droplets, MapPin, Tablet, Loader2, ExternalLink, Sunrise, Sunset, Navigation, AlertCircle, Search } from 'lucide-react';
+import { Sun, Cloud, CloudRain, Moon, Wind, Droplets, MapPin, Tablet, Loader2, ExternalLink, Sunrise, Sunset, Navigation, AlertCircle, Search, X } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { WeatherData } from './types';
 import { ATMOSPHERIC_THEMES, MOCK_WEATHER } from './constants';
@@ -32,23 +32,30 @@ const App: React.FC = () => {
       
       let locationContext = "";
       if (lat !== undefined && lon !== undefined) {
-        locationContext = `at Latitude ${lat}, Longitude ${lon}`;
+        locationContext = `at coordinates: ${lat}, ${lon}`;
       } else if (locationHint) {
-        locationContext = `in ${locationHint}`;
+        locationContext = `in "${locationHint}"`;
+      } else {
+        locationContext = `for the user's current city based on their IP context`;
       }
 
-      const prompt = `Provide the current weather ${locationContext}. Use Google Search to get the latest data.
-      Return the result as a JSON object with the following structure:
+      const prompt = `Act as a precise weather station. Search the web for current, real-time weather data ${locationContext}.
+      
+      You MUST return ONLY a raw JSON object. Do not include markdown formatting, backticks, or explanatory text.
+      
+      Required JSON structure:
       {
-        "temp": number,
+        "temp": (number in Celsius),
         "condition": "clear" | "cloudy" | "rainy" | "night" | "hazy",
-        "location": "City Name",
-        "windSpeed": number,
-        "humidity": number,
-        "precipitation": number,
+        "location": "City Name, Region",
+        "windSpeed": (number in km/h),
+        "humidity": (number percentage),
+        "precipitation": (number in mm),
         "sunrise": "HH:MM",
         "sunset": "HH:MM"
-      }`;
+      }
+
+      If it is currently dark outside at that location, set condition to "night". Use the googleSearch tool to ensure accuracy.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
@@ -59,13 +66,17 @@ const App: React.FC = () => {
       });
 
       const text = response.text || "";
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      // Resilient parsing: strip potential markdown code blocks and whitespace
+      const cleanedText = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      const jsonMatch = cleanedText.match(/\{[\s\S]*\}/);
+      
       if (jsonMatch) {
         const data = JSON.parse(jsonMatch[0]) as WeatherData;
         setWeather(data);
         setShowSearch(false);
+        setManualSearch('');
       } else {
-        throw new Error("Failed to parse weather data");
+        throw new Error("Invalid response format from AI.");
       }
 
       const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
@@ -77,8 +88,8 @@ const App: React.FC = () => {
       }
 
     } catch (err: any) {
-      console.error("Sync error:", err);
-      setError("Atmospheric sync failed");
+      console.error("Sync error details:", err);
+      setError("Atmospheric sync failed. Please try a manual search.");
       if (!weather) setWeather(MOCK_WEATHER.current);
     } finally {
       setIsLoading(false);
@@ -88,21 +99,30 @@ const App: React.FC = () => {
 
   const handleLocate = useCallback(async () => {
     setIsLocating(true);
+    setError(null);
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
           fetchWeather(position.coords.latitude, position.coords.longitude);
         },
-        async () => {
+        async (geoErr) => {
+          console.warn("Geolocation failed:", geoErr.message);
           try {
             const res = await fetch('https://ipapi.co/json/');
             const data = await res.json();
-            fetchWeather(undefined, undefined, data.city || undefined);
+            if (data.city) {
+              fetchWeather(undefined, undefined, data.city);
+            } else {
+              throw new Error("IP data incomplete");
+            }
           } catch {
-            fetchWeather();
+            setError("Location detection failed. Please search manually.");
+            setIsLocating(false);
+            setIsLoading(false);
+            setShowSearch(true);
           }
         },
-        { timeout: 10000 }
+        { timeout: 12000, enableHighAccuracy: true }
       );
     } else {
       fetchWeather();
@@ -130,14 +150,18 @@ const App: React.FC = () => {
 
   const handleManualSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (manualSearch.trim()) fetchWeather(undefined, undefined, manualSearch.trim());
+    if (manualSearch.trim()) {
+      fetchWeather(undefined, undefined, manualSearch.trim());
+    }
   };
 
   if (isLoading && !weather) {
     return (
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-stone-50 text-stone-400 font-light tracking-[0.2em]">
         <Loader2 className="animate-spin mb-4" size={32} strokeWidth={1} />
-        <p className="text-xs uppercase tracking-[0.3em]">Sensing Atmosphere...</p>
+        <p className="text-[10px] uppercase tracking-[0.3em] animate-pulse">
+          {isLocating ? 'Detecting Coordinates...' : 'Sensing Atmosphere...'}
+        </p>
       </div>
     );
   }
@@ -164,9 +188,12 @@ const App: React.FC = () => {
 
       <header className="relative z-10 p-6 md:p-12 flex justify-between items-start">
         <div className="flex flex-col gap-1">
-          <button onClick={() => setShowSearch(!showSearch)} className="flex items-center gap-2 opacity-60 hover:opacity-100 transition-opacity">
-            <MapPin size={12} strokeWidth={1} />
-            <span className="text-[10px] md:text-xs uppercase tracking-[0.3em] font-light">
+          <button 
+            onClick={() => setShowSearch(!showSearch)} 
+            className="flex items-center gap-2 group"
+          >
+            <MapPin size={12} strokeWidth={1} className="opacity-60 group-hover:opacity-100 transition-opacity" />
+            <span className="text-[10px] md:text-xs uppercase tracking-[0.3em] font-light opacity-60 group-hover:opacity-100 transition-opacity">
               {activeWeather.location}
             </span>
           </button>
@@ -176,10 +203,23 @@ const App: React.FC = () => {
         </div>
 
         <div className="flex gap-2">
-          <button onClick={handleLocate} className={`p-2 rounded-full border ${isEink ? 'border-black' : 'border-current/20 hover:bg-white/10'}`}>
+          <button 
+            onClick={() => setShowSearch(!showSearch)}
+            className={`p-2 rounded-full border transition-all ${showSearch ? 'bg-current text-white border-current' : isEink ? 'border-black' : 'border-current/20 hover:bg-white/10'}`}
+          >
+            <Search size={18} strokeWidth={1} />
+          </button>
+          <button 
+            onClick={handleLocate} 
+            disabled={isLocating}
+            className={`p-2 rounded-full border transition-all ${isEink ? 'border-black' : 'border-current/20 hover:bg-white/10'}`}
+          >
             <Navigation size={18} strokeWidth={1} className={isLocating ? 'animate-pulse' : ''} />
           </button>
-          <button onClick={() => setIsEink(!isEink)} className={`p-2 rounded-full border ${isEink ? 'bg-black text-white' : 'border-current/20 hover:bg-white/10'}`}>
+          <button 
+            onClick={() => setIsEink(!isEink)} 
+            className={`p-2 rounded-full border transition-all ${isEink ? 'bg-black text-white' : 'border-current/20 hover:bg-white/10'}`}
+          >
             <Tablet size={18} strokeWidth={1} />
           </button>
         </div>
@@ -188,40 +228,59 @@ const App: React.FC = () => {
       <main className="relative z-10 flex-grow flex flex-col items-center justify-center px-6 py-8">
         <AnimatePresence>
           {showSearch && (
-            <motion.form 
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              onSubmit={handleManualSearch}
-              className="w-full max-w-md mb-12 flex gap-2 border-b border-current/20 pb-2"
+            <motion.div 
+              initial={{ height: 0, opacity: 0, y: -20 }}
+              animate={{ height: 'auto', opacity: 1, y: 0 }}
+              exit={{ height: 0, opacity: 0, y: -20 }}
+              className="w-full max-w-md mb-12"
             >
-              <Search size={18} className="opacity-40" />
-              <input 
-                autoFocus
-                type="text"
-                placeholder="Enter city..."
-                value={manualSearch}
-                onChange={(e) => setManualSearch(e.target.value)}
-                className="bg-transparent border-none outline-none flex-grow text-sm uppercase tracking-widest placeholder:opacity-30"
-              />
-            </motion.form>
+              <form onSubmit={handleManualSearch} className="flex gap-2 border-b border-current/20 pb-2 items-center">
+                <Search size={16} className="opacity-40" />
+                <input 
+                  autoFocus
+                  type="text"
+                  placeholder="Type a city name..."
+                  value={manualSearch}
+                  onChange={(e) => setManualSearch(e.target.value)}
+                  className="bg-transparent border-none outline-none flex-grow text-sm uppercase tracking-widest placeholder:opacity-30"
+                />
+                {manualSearch && (
+                  <button type="submit" className="text-[10px] font-bold uppercase tracking-widest px-2 py-1 rounded hover:bg-current hover:text-white transition-colors">
+                    Sync
+                  </button>
+                )}
+                <button type="button" onClick={() => setShowSearch(false)} className="opacity-40 hover:opacity-100">
+                  <X size={16} />
+                </button>
+              </form>
+            </motion.div>
           )}
         </AnimatePresence>
 
         <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
           <section className="flex flex-col items-center lg:items-start text-center lg:text-left">
-            <div className="mb-8 md:mb-10 opacity-80">
+            <motion.div 
+              key={activeWeather.condition}
+              initial={{ scale: 0.8, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              className="mb-8 md:mb-10 opacity-80"
+            >
               {activeWeather.condition === 'clear' && <Sun size={64} strokeWidth={0.5} />}
               {activeWeather.condition === 'cloudy' && <Cloud size={64} strokeWidth={0.5} />}
               {activeWeather.condition === 'rainy' && <CloudRain size={64} strokeWidth={0.5} />}
               {activeWeather.condition === 'night' && <Moon size={64} strokeWidth={0.5} />}
               {activeWeather.condition === 'hazy' && <Wind size={64} strokeWidth={0.5} />}
-            </div>
+            </motion.div>
 
             <div className="relative inline-block">
-              <h2 className={`text-[8rem] sm:text-[10rem] md:text-[14rem] leading-[0.8] tracking-tighter ${isEink ? 'font-serif font-black' : 'font-[100]'}`}>
+              <motion.h2 
+                key={activeWeather.temp}
+                initial={{ opacity: 0, filter: 'blur(10px)' }}
+                animate={{ opacity: 1, filter: 'blur(0px)' }}
+                className={`text-[8rem] sm:text-[10rem] md:text-[14rem] leading-[0.8] tracking-tighter ${isEink ? 'font-serif font-black' : 'font-[100]'}`}
+              >
                 {activeWeather.temp}°
-              </h2>
+              </motion.h2>
               <div className="absolute -top-16 md:-top-20 right-[-60px] md:right-[-100px]">
                 <span className={`text-sm md:text-xl uppercase tracking-[0.4em] opacity-40 ${isEink ? 'font-bold' : 'font-light'}`}>
                   {activeWeather.condition}
@@ -230,7 +289,7 @@ const App: React.FC = () => {
             </div>
 
             <p className={`mt-8 text-base md:text-xl max-w-sm opacity-70 ${isEink ? 'font-serif italic' : 'font-light'}`}>
-              The air feels {activeWeather.temp > 20 ? 'warm' : 'cool'} in {activeWeather.location.split(',')[0]}.
+              The air feels {activeWeather.temp > 22 ? 'warm' : activeWeather.temp < 15 ? 'chilly' : 'pleasant'} in {activeWeather.location.split(',')[0]}.
             </p>
           </section>
 
@@ -249,12 +308,19 @@ const App: React.FC = () => {
       <footer className="relative z-10 p-6 md:p-12 flex flex-col md:flex-row justify-between items-center opacity-40 text-[8px] md:text-[10px] uppercase tracking-[0.4em] font-light gap-4">
         <div className="flex gap-4">
           {sources.slice(0, 2).map((source, idx) => (
-            <a key={idx} href={source.uri} target="_blank" className="hover:underline">{source.title.toUpperCase()}</a>
+            <a key={idx} href={source.uri} target="_blank" className="hover:underline flex items-center gap-1">
+              {source.title.toUpperCase()} <ExternalLink size={8} />
+            </a>
           ))}
+          {sources.length === 0 && <span>Atmospheric Source Verified</span>}
         </div>
         <div className="flex gap-4 items-center">
-          {error && <span className="flex items-center gap-1 text-red-500"><AlertCircle size={10}/> {error}</span>}
-          <span>v1.2.0 // Zen Atmosphere</span>
+          {error && (
+            <button onClick={() => setShowSearch(true)} className="flex items-center gap-1 text-red-500 font-bold hover:underline">
+              <AlertCircle size={10}/> {error}
+            </button>
+          )}
+          <span>v1.3.0 // Zen Atmosphere Engine</span>
         </div>
       </footer>
     </div>
@@ -262,8 +328,8 @@ const App: React.FC = () => {
 };
 
 const StatCard: React.FC<{ icon: React.ReactNode, label: string, value: string, isEink: boolean }> = ({ icon, label, value, isEink }) => (
-  <div className={`p-4 md:p-6 rounded-2xl border backdrop-blur-sm flex flex-col gap-3
-    ${isEink ? 'bg-white border-black text-black border-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'bg-white/5 border-white/10'}`}>
+  <div className={`p-4 md:p-6 rounded-2xl border backdrop-blur-sm flex flex-col gap-3 transition-all
+    ${isEink ? 'bg-white border-black text-black border-2 shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]' : 'bg-white/5 border-white/10 hover:bg-white/10'}`}>
     <div className="opacity-60">{icon}</div>
     <div>
       <p className="text-[9px] uppercase tracking-widest opacity-60 mb-1">{label}</p>
