@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sun, Cloud, CloudRain, Moon, Wind, Droplets, MapPin, Tablet, RefreshCw, Loader2, ExternalLink, Sunrise, Sunset, Navigation, AlertCircle } from 'lucide-react';
+import { Sun, Cloud, CloudRain, Moon, Wind, Droplets, MapPin, Tablet, Loader2, ExternalLink, Sunrise, Sunset, Navigation, AlertCircle } from 'lucide-react';
 import { GoogleGenAI } from "@google/genai";
 import { WeatherData } from './types';
 import { ATMOSPHERIC_THEMES, MOCK_WEATHER } from './constants';
@@ -17,34 +17,31 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [sources, setSources] = useState<{ title: string; uri: string }[]>([]);
 
-  // Update clock every second
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch weather data using Gemini API with Google Search grounding
-  const fetchWeather = useCallback(async (locationHint?: string, lat?: number, lon?: number) => {
+  const fetchWeather = useCallback(async (lat?: number, lon?: number, locationHint?: string) => {
     setIsLoading(true);
     setError(null);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
       
-      // Strict coordinate-based prompt to prevent hallucinating Basel
       let locationContext = "";
       if (lat !== undefined && lon !== undefined) {
-        locationContext = `at exactly: Latitude ${lat}, Longitude ${lon}. Find the nearest city for these coordinates.`;
+        locationContext = `at exactly these coordinates: Latitude ${lat}, Longitude ${lon}. Find the nearest city.`;
       } else if (locationHint) {
         locationContext = `in ${locationHint}.`;
       } else {
-        locationContext = `for the user's current city based on their current web request context.`;
+        locationContext = `for the user's current city based on their internet metadata.`;
       }
 
       const prompt = `Find the current local weather ${locationContext}. 
-      Use Google Search for real-time data from authoritative sources like AccuWeather or Weather.com.
-      IMPORTANT: Do NOT default to Basel, Switzerland unless specifically identified.
+      Use Google Search for real-time accurate data.
+      IMPORTANT: Do NOT default to Basel, Switzerland unless the user is actually there.
       
-      Return the data strictly as a JSON object:
+      Return ONLY a JSON object:
       {
         "temp": number (Celsius),
         "condition": "clear" | "cloudy" | "rainy" | "night" | "hazy",
@@ -55,15 +52,12 @@ const App: React.FC = () => {
         "sunrise": "HH:MM",
         "sunset": "HH:MM"
       }
-      If the current local time at that location is after sunset or before sunrise, set condition to "night".
-      Only return the JSON string.`;
+      Set condition to "night" if it is dark outside there right now.`;
 
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: prompt,
-        config: {
-          tools: [{ googleSearch: {} }],
-        },
+        config: { tools: [{ googleSearch: {} }] },
       });
 
       const text = response.text || "";
@@ -72,23 +66,19 @@ const App: React.FC = () => {
         const data = JSON.parse(jsonMatch[0]) as WeatherData;
         setWeather(data);
       } else {
-        throw new Error("Invalid atmospheric data format.");
+        throw new Error("Sync failed.");
       }
 
-      // Mandatory grounding sources display
       const groundingChunks = response.candidates?.[0]?.groundingMetadata?.groundingChunks;
       if (groundingChunks) {
-        const extractedSources = groundingChunks
-          .filter((chunk: any) => chunk.web)
-          .map((chunk: any) => ({
-            title: chunk.web.title,
-            uri: chunk.web.uri,
-          }));
-        setSources(extractedSources);
+        setSources(groundingChunks.filter((c: any) => c.web).map((c: any) => ({
+          title: c.web.title,
+          uri: c.web.uri,
+        })));
       }
 
     } catch (err: any) {
-      console.error("Fetch Error:", err);
+      console.error("Atmospheric sync error:", err);
       setError("Atmospheric sync failed.");
       if (!weather) setWeather(MOCK_WEATHER.current);
     } finally {
@@ -99,51 +89,46 @@ const App: React.FC = () => {
 
   const handleLocate = useCallback(async () => {
     setIsLocating(true);
-    
-    // Step 1: Native Geolocation (GPS/Browser precision)
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          fetchWeather(undefined, position.coords.latitude, position.coords.longitude);
+          const { latitude, longitude } = position.coords;
+          fetchWeather(latitude, longitude);
         },
         async (geoError) => {
-          console.warn("Geolocation fallback to IP:", geoError.message);
-          
-          // Step 2: IP-based location fallback (fixes Basel issue on Vercel)
+          console.warn("GPS access failed. Trying IP fallback...", geoError.message);
           try {
             const ipResponse = await fetch('https://ipapi.co/json/');
             const ipData = await ipResponse.json();
             if (ipData.city) {
-              fetchWeather(`${ipData.city}, ${ipData.country_name}`);
+              fetchWeather(undefined, undefined, `${ipData.city}, ${ipData.country_name}`);
             } else {
-              fetchWeather(); // Generic search fallback
+              fetchWeather();
             }
-          } catch (ipErr) {
+          } catch {
             fetchWeather();
           }
         },
-        { timeout: 10000, enableHighAccuracy: true }
+        { timeout: 8000, enableHighAccuracy: true }
       );
     } else {
       fetchWeather();
     }
   }, [fetchWeather]);
 
-  // Initial detection on mount
   useEffect(() => {
     handleLocate();
   }, []);
 
   const activeWeather = weather || MOCK_WEATHER.current;
 
-  // Day/Night Logic
   const isDaytime = useMemo(() => {
     if (!activeWeather.sunrise || !activeWeather.sunset) return true;
     const now = currentTime.getHours() * 60 + currentTime.getMinutes();
     const [riseH, riseM] = activeWeather.sunrise.split(':').map(Number);
     const [setH, setM] = activeWeather.sunset.split(':').map(Number);
     return now >= (riseH * 60 + riseM) && now < (setH * 60 + setM);
-  }, [activeWeather.sunrise, activeWeather.sunset, currentTime]);
+  }, [activeWeather, currentTime]);
 
   const theme = useMemo(() => {
     if (isEink) return { gradient: 'bg-white', text: 'text-black' };
@@ -156,7 +141,7 @@ const App: React.FC = () => {
       <div className="min-h-screen w-full flex flex-col items-center justify-center bg-stone-50 text-stone-400 font-light tracking-[0.2em]">
         <Loader2 className="animate-spin mb-4" size={32} strokeWidth={1} />
         <p className="text-xs uppercase tracking-[0.3em] px-10 text-center">
-          {isLocating ? "Locating Experience..." : "Sensing Atmosphere..."}
+          {isLocating ? "Acquiring Coordinates..." : "Sensing Atmosphere..."}
         </p>
       </div>
     );
@@ -198,16 +183,14 @@ const App: React.FC = () => {
         <div className="flex gap-2">
           <button 
             onClick={handleLocate}
-            className={`p-2 rounded-full transition-all border ${isEink ? 'border-black hover:bg-black hover:text-white' : 'border-current/20 hover:bg-white/10'}`}
-            title="Update Location"
             disabled={isLocating}
+            className={`p-2 rounded-full transition-all border ${isEink ? 'border-black' : 'border-current/20 hover:bg-white/10'}`}
           >
             <Navigation size={18} strokeWidth={1} className={isLocating ? 'animate-pulse' : ''} />
           </button>
           <button 
             onClick={() => setIsEink(!isEink)}
-            className={`p-2 rounded-full transition-all border ${isEink ? 'bg-black text-white border-black' : 'border-current/20 hover:bg-white/10'}`}
-            title="E-Ink Mode"
+            className={`p-2 rounded-full transition-all border ${isEink ? 'bg-black text-white' : 'border-current/20 hover:bg-white/10'}`}
           >
             <Tablet size={18} strokeWidth={1} />
           </button>
@@ -216,7 +199,6 @@ const App: React.FC = () => {
 
       <main className="relative z-10 flex-grow flex flex-col items-center justify-center px-6 py-8">
         <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
-          
           <section className="flex flex-col items-center lg:items-start text-center lg:text-left">
             <motion.div
               key={activeWeather.condition}
@@ -248,13 +230,12 @@ const App: React.FC = () => {
             </div>
 
             <p className={`mt-8 text-base md:text-xl max-w-sm opacity-70 ${isEink ? 'font-serif italic' : 'font-light'}`}>
-              The air is {activeWeather.temp > 20 ? 'warm' : 'cool'} and {activeWeather.condition} in {activeWeather.location.split(',')[0]}.
+              It's {isDaytime ? 'a' : 'a quiet'} {activeWeather.condition} {isDaytime ? 'day' : 'night'} in {activeWeather.location.split(',')[0]}.
             </p>
           </section>
 
           <section className="flex flex-col gap-6 w-full">
             <TennisIndex weather={activeWeather} isEink={isEink} />
-            
             <div className="grid grid-cols-2 gap-4">
               <StatCard icon={<Wind size={14}/>} label="Wind" value={`${activeWeather.windSpeed} km/h`} isEink={isEink} />
               <StatCard icon={<Droplets size={14}/>} label="Humidity" value={`${activeWeather.humidity}%`} isEink={isEink} />
@@ -265,22 +246,17 @@ const App: React.FC = () => {
         </div>
       </main>
 
-      {sources.length > 0 && !isEink && (
-        <div className="relative z-10 px-6 md:px-12 pb-6 flex flex-wrap gap-x-4 gap-y-2 opacity-30 text-[8px] uppercase tracking-[0.2em] items-center">
-          <span className="font-bold">Sources:</span>
+      <footer className="relative z-10 p-6 md:p-12 pt-4 flex flex-col md:flex-row justify-between items-center opacity-40 text-[8px] md:text-[10px] uppercase tracking-[0.4em] font-light gap-4">
+        <div className="flex gap-4">
           {sources.slice(0, 2).map((source, idx) => (
             <a key={idx} href={source.uri} target="_blank" rel="noopener noreferrer" className="hover:underline flex items-center gap-1">
-              {source.title.toUpperCase()} <ExternalLink size={6} />
+              {source.title.toUpperCase()}
             </a>
           ))}
         </div>
-      )}
-
-      <footer className="relative z-10 p-6 md:p-12 pt-4 flex justify-between items-end opacity-40 text-[8px] md:text-[10px] uppercase tracking-[0.4em] font-light">
-        <div>Atmo // Zen Atmosphere Engine</div>
         <div className="flex gap-4 items-center">
           {error && <span className="flex items-center gap-1 text-red-400 font-bold"><AlertCircle size={10}/> {error}</span>}
-          <span>v1.2.6</span>
+          <span>v1.2.7 // Zen Experience</span>
         </div>
       </footer>
     </div>

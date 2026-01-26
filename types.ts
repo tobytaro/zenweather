@@ -1,4 +1,3 @@
-
 export type WeatherCondition = 'clear' | 'cloudy' | 'rainy' | 'night' | 'hazy';
 
 export interface WeatherData {
