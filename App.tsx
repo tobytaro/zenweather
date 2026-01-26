@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sun, Cloud, CloudRain, Moon, Wind, Tablet, Loader2, ExternalLink, Navigation, AlertCircle, Search, RefreshCw } from 'lucide-react';
+import { Tablet, Loader2, Navigation, AlertCircle, Search, Sun, Cloud, CloudRain, Moon, Wind, Droplets } from 'lucide-react';
 import { GoogleGenAI, Type } from "@google/genai";
-import { WeatherData } from './types';
+import { WeatherData, WeatherCondition } from './types';
 import { ATMOSPHERIC_THEMES, MOCK_WEATHER } from './constants';
 import TennisIndex from './components/TennisIndex';
 import WeatherAnimations from './components/WeatherAnimations';
@@ -27,11 +27,8 @@ const App: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      // Re-asserting process.env.API_KEY as per core system rules
-      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("API_KEY_MISSING");
-      }
+      const apiKey = process.env.API_KEY || (process.env as any).VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error("API_KEY_MISSING");
       
       const ai = new GoogleGenAI({ apiKey });
       
@@ -46,7 +43,7 @@ const App: React.FC = () => {
 
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
-        contents: `Provide current weather for ${locationQuery}. If it is night, set condition to 'night'. Include temperature in Celsius, wind speed, humidity, and precipitation. Use Google Search grounding for real-time accuracy.`,
+        contents: `Provide current weather for ${locationQuery}. If night, set condition to 'night'. Include temp (C), wind, humidity, precip, sunrise/sunset. Use Google Search grounding.`,
         config: {
           tools: [{ googleSearch: {} }],
           responseMimeType: "application/json",
@@ -83,14 +80,12 @@ const App: React.FC = () => {
       console.error("Sync error:", err);
       const errMsg = err.message || "";
       if (errMsg.includes("429") || errMsg.toLowerCase().includes("quota")) {
-        setError("Atmospheric Quota Exceeded. Using cached patterns.");
+        setError("Quota Exceeded.");
       } else if (errMsg === "API_KEY_MISSING") {
-        setError("Atmospheric Sync Paused: API Key needed.");
+        setError("Key Needed.");
       } else {
-        setError("Atmospheric sync interrupted.");
+        setError("Sync failed.");
       }
-      
-      // Fallback to mock if no weather exists
       if (!weather) setWeather(MOCK_WEATHER.current);
     } finally {
       setIsLoading(false);
@@ -106,16 +101,13 @@ const App: React.FC = () => {
         () => fetchWeather(),
         { timeout: 8000 }
       );
-    } else {
-      fetchWeather();
-    }
+    } else fetchWeather();
   }, [fetchWeather]);
 
-  useEffect(() => {
-    handleLocate();
-  }, []);
+  useEffect(() => { handleLocate(); }, []);
 
   const activeWeather = weather || MOCK_WEATHER.current;
+  
   const isDaytime = useMemo(() => {
     if (!activeWeather.sunrise || !activeWeather.sunset) return true;
     try {
@@ -123,9 +115,7 @@ const App: React.FC = () => {
       const [rH, rM] = activeWeather.sunrise.split(':').map(Number);
       const [sH, sM] = activeWeather.sunset.split(':').map(Number);
       return now >= (rH * 60 + rM) && now < (sH * 60 + sM);
-    } catch (e) {
-      return true;
-    }
+    } catch { return true; }
   }, [activeWeather, currentTime]);
 
   const theme = useMemo(() => 
@@ -133,17 +123,28 @@ const App: React.FC = () => {
     (ATMOSPHERIC_THEMES[activeWeather.condition] || ATMOSPHERIC_THEMES.clear), 
   [activeWeather.condition, isEink]);
 
+  const WeatherIcon = ({ condition, size = 24 }: { condition: WeatherCondition, size?: number }) => {
+    switch (condition) {
+      case 'clear': return <Sun size={size} strokeWidth={1.5} />;
+      case 'cloudy': return <Cloud size={size} strokeWidth={1.5} />;
+      case 'rainy': return <CloudRain size={size} strokeWidth={1.5} />;
+      case 'night': return <Moon size={size} strokeWidth={1.5} />;
+      case 'hazy': return <Wind size={size} strokeWidth={1.5} />;
+      default: return <Sun size={size} strokeWidth={1.5} />;
+    }
+  };
+
   if (isLoading && !weather) {
     return (
-      <div className="min-h-screen w-full flex flex-col items-center justify-center bg-[#FDFCFB] text-stone-400 font-light tracking-[0.2em]">
+      <div className="h-screen w-full flex flex-col items-center justify-center bg-[#FDFCFB] text-stone-400 font-light tracking-[0.2em]">
         <Loader2 className="animate-spin mb-4 opacity-50" size={24} strokeWidth={1} />
-        <p className="text-[10px] uppercase tracking-[0.5em]">Establishing Sync...</p>
+        <p className="text-[11px] uppercase tracking-[0.5em]">Syncing Atmosphere...</p>
       </div>
     );
   }
 
   return (
-    <div className={`relative min-h-screen w-full transition-colors duration-1000 flex flex-col overflow-x-hidden ${theme.text}`}>
+    <div className={`relative h-screen w-full transition-colors duration-1000 flex flex-col overflow-hidden ${theme.text}`}>
       <AnimatePresence mode="wait">
         <motion.div 
           key={isEink ? 'eink' : `${activeWeather.condition}-${isDaytime}`} 
@@ -159,90 +160,80 @@ const App: React.FC = () => {
         isEink={isEink} 
       />
 
-      <header className="relative z-10 p-10 md:p-14 flex justify-between items-start w-full">
-        <div className="flex flex-col items-start">
-          <span className="text-[10px] uppercase tracking-[0.6em] opacity-30 font-bold mb-2">Location</span>
+      <header className="relative z-10 px-6 py-4 md:px-12 md:py-10 flex justify-between items-center w-full">
+        <div className="flex flex-col">
+          <span className="text-[8px] uppercase tracking-[0.6em] opacity-40 font-bold mb-1">Atmosphere</span>
           <button onClick={() => setShowSearch(!showSearch)} className="group text-left">
-            <span className="text-[14px] md:text-[18px] uppercase tracking-[0.1em] font-medium opacity-60 group-hover:opacity-100 transition-opacity">
-              {activeWeather.location}
+            <span className="text-[12px] md:text-[18px] uppercase tracking-[0.15em] font-medium opacity-70 group-hover:opacity-100 transition-opacity">
+              {activeWeather.location.split(',')[0]}
             </span>
           </button>
         </div>
 
-        <div className="flex gap-4">
-          <HeaderAction onClick={() => setShowSearch(!showSearch)} active={showSearch} isEink={isEink}><Search size={20} strokeWidth={1} /></HeaderAction>
-          <HeaderAction onClick={handleLocate} disabled={isLocating} isEink={isEink}><Navigation size={20} strokeWidth={1} className={isLocating ? 'animate-pulse' : ''} /></HeaderAction>
-          <HeaderAction onClick={() => setIsEink(!isEink)} active={isEink} isEink={isEink}><Tablet size={20} strokeWidth={1} /></HeaderAction>
+        <div className="flex gap-3">
+          <HeaderAction onClick={() => setShowSearch(!showSearch)} active={showSearch} isEink={isEink}><Search size={16} /></HeaderAction>
+          <HeaderAction onClick={handleLocate} disabled={isLocating} isEink={isEink}><Navigation size={16} className={isLocating ? 'animate-pulse' : ''} /></HeaderAction>
+          <HeaderAction onClick={() => setIsEink(!isEink)} active={isEink} isEink={isEink}><Tablet size={16} /></HeaderAction>
         </div>
       </header>
 
-      <main className="relative z-10 flex-grow flex flex-col items-center justify-center px-10 md:px-20 py-10">
+      <main className="relative z-10 flex-grow flex flex-col items-center justify-center px-6 md:px-20 overflow-hidden">
         <AnimatePresence>
           {showSearch && (
-            <motion.div initial={{ opacity: 0, y: -20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="w-full max-w-sm mb-20">
-              <form onSubmit={(e) => { e.preventDefault(); fetchWeather(undefined, undefined, manualSearch); }} className="flex gap-3 border-b border-current/20 pb-4 items-center">
-                <input 
-                  autoFocus 
-                  type="text" 
-                  placeholder="SEARCH CITY..." 
-                  value={manualSearch} 
-                  onChange={(e) => setManualSearch(e.target.value)} 
-                  className="bg-transparent border-none outline-none flex-grow text-[11px] uppercase tracking-[0.4em] placeholder:opacity-20" 
-                />
-                <button type="submit" className="opacity-40 hover:opacity-100"><Search size={18}/></button>
+            <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }} className="w-full max-w-xs mb-6">
+              <form onSubmit={(e) => { e.preventDefault(); fetchWeather(undefined, undefined, manualSearch); }} className="flex gap-3 border-b border-current/20 pb-2 items-center">
+                <input autoFocus type="text" placeholder="Locate..." value={manualSearch} onChange={(e) => setManualSearch(e.target.value)} className="bg-transparent border-none outline-none flex-grow text-[10px] uppercase tracking-[0.4em] placeholder:opacity-20" />
+                <button type="submit" className="opacity-40 hover:opacity-100"><Search size={14}/></button>
               </form>
             </motion.div>
           )}
         </AnimatePresence>
 
-        <div className="w-full max-w-7xl grid grid-cols-1 lg:grid-cols-2 gap-20 lg:gap-40 items-center">
-          <section className="flex flex-col items-center lg:items-start text-center lg:text-left">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="relative">
-              <h2 className={`text-[12rem] md:text-[18rem] leading-[0.7] tracking-tighter ${isEink ? 'font-serif font-black' : 'font-[100]'}`}>
+        <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-14 items-center">
+          <section className="flex flex-col items-center md:items-start text-center md:text-left">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="flex flex-col items-center md:items-start"
+            >
+              <div className="mb-4 opacity-40">
+                <WeatherIcon condition={activeWeather.condition} size={48} />
+              </div>
+              <h2 className={`text-[7rem] md:text-[10rem] leading-[0.8] tracking-tighter ${isEink ? 'font-serif font-black' : 'font-[100]'}`}>
                 {Math.round(activeWeather.temp)}°
               </h2>
+              <div className="mt-6">
+                <h3 className={`text-3xl md:text-5xl ${isEink ? 'font-serif font-black italic' : 'font-[200]'} tracking-[0.2em] uppercase opacity-80`}>
+                  {activeWeather.condition}
+                </h3>
+              </div>
             </motion.div>
-
-            <div className="mt-16 flex flex-col items-center lg:items-start">
-              <span className="text-[12px] uppercase tracking-[0.8em] opacity-25 font-bold mb-4">Atmosphere</span>
-              <h3 className={`text-6xl md:text-8xl ${isEink ? 'font-serif font-black italic' : 'font-[200]'} tracking-[0.1em] uppercase`}>
-                {activeWeather.condition === 'night' ? 'Clear Night' : activeWeather.condition}
-              </h3>
-            </div>
-
-            <p className={`mt-12 text-xl md:text-2xl max-w-md opacity-40 leading-relaxed ${isEink ? 'font-serif italic font-medium' : 'font-light'}`}>
-              The current atmosphere in {activeWeather.location.split(',')[0]} is {activeWeather.condition === 'night' ? 'peaceful' : activeWeather.condition}.
-            </p>
           </section>
 
-          <section className="flex flex-col gap-14 w-full max-w-lg mx-auto lg:mx-0">
+          <section className="flex flex-col gap-4 w-full max-w-[340px] mx-auto md:mx-0">
             <TennisIndex weather={activeWeather} isEink={isEink} />
-            <div className="grid grid-cols-2 gap-8">
-              <StatCard label="Wind" value={`${activeWeather.windSpeed} km/h`} isEink={isEink} />
-              <StatCard label="Humidity" value={`${activeWeather.humidity}%`} isEink={isEink} />
-              <StatCard label="Sunrise" value={activeWeather.sunrise || "--:--"} isEink={isEink} />
-              <StatCard label="Sunset" value={activeWeather.sunset || "--:--"} isEink={isEink} />
+            <div className="grid grid-cols-2 gap-3">
+              <StatCard label="Wind" value={`${activeWeather.windSpeed} km`} icon={<Wind size={10} />} isEink={isEink} />
+              <StatCard label="Hum" value={`${activeWeather.humidity}%`} icon={<Droplets size={10} />} isEink={isEink} />
+              <StatCard label="Sunrise" value={activeWeather.sunrise || "06:00"} isEink={isEink} />
+              <StatCard label="Sunset" value={activeWeather.sunset || "20:00"} isEink={isEink} />
             </div>
           </section>
         </div>
       </main>
 
-      <footer className="relative z-10 p-10 md:p-14 flex flex-col md:flex-row justify-between items-center gap-10">
-        <div className="flex gap-4 items-center">
+      <footer className="relative z-10 px-6 py-5 md:px-12 md:py-10 flex flex-row justify-between items-center text-[8px] uppercase tracking-[0.5em] opacity-40">
+        <div className="flex gap-4">
           {sources.length > 0 ? (
-            <a href={sources[0].uri} target="_blank" rel="noopener noreferrer" className="text-[10px] uppercase tracking-[0.4em] opacity-20 hover:opacity-100 flex items-center gap-2 transition-opacity">
-              {sources[0].title.slice(0, 30)}... <ExternalLink size={12} />
+            <a href={sources[0].uri} target="_blank" rel="noopener noreferrer" className="hover:opacity-100 flex items-center gap-1 transition-opacity">
+              {sources[0].title.slice(0, 12)}...
             </a>
-          ) : <span className="text-[10px] uppercase tracking-[0.4em] opacity-10">Zen established</span>}
+          ) : <span>Atmo State: Synced</span>}
         </div>
         
-        <div className="flex gap-10 items-center">
-          {error && (
-            <div className="flex items-center gap-2 text-red-500 text-[10px] uppercase tracking-[0.3em] font-bold">
-              <AlertCircle size={12} /> {error}
-            </div>
-          )}
-          <span className="text-[10px] uppercase tracking-[0.6em] opacity-10 whitespace-nowrap">Zen core v1.9.1</span>
+        <div className="flex gap-6 items-center">
+          {error && <div className="text-red-500 font-bold tracking-[0.2em]">{error}</div>}
+          <span className="whitespace-nowrap font-medium">Core v1.9.5</span>
         </div>
       </footer>
     </div>
@@ -253,16 +244,19 @@ const HeaderAction: React.FC<{ children: React.ReactNode, onClick: () => void, a
   <button 
     onClick={onClick} 
     disabled={disabled} 
-    className={`p-4 rounded-full border transition-all duration-300 ${disabled ? 'opacity-20 cursor-not-allowed' : ''} ${isEink ? (active ? 'bg-black text-white border-black' : 'border-black hover:bg-black/5') : (active ? 'bg-current text-white border-current' : 'border-current/10 hover:border-current/30')}`}
+    className={`p-2 rounded-full border transition-all duration-300 ${disabled ? 'opacity-20' : ''} ${isEink ? (active ? 'bg-black text-white border-black' : 'border-black hover:bg-black/5') : (active ? 'bg-current text-white border-current' : 'border-current/10 hover:border-current/30')}`}
   >
     {children}
   </button>
 );
 
-const StatCard: React.FC<{ label: string, value: string, isEink: boolean }> = ({ label, value, isEink }) => (
-  <div className={`p-10 rounded-[3rem] border transition-all duration-500 ${isEink ? 'bg-white border-black text-black border-2' : 'bg-white/5 border-white/5 hover:border-white/10'}`}>
-    <p className="text-[11px] uppercase tracking-[0.5em] opacity-30 mb-5 font-bold">{label}</p>
-    <p className={`text-2xl ${isEink ? 'font-serif font-black' : 'font-light'}`}>{value}</p>
+const StatCard: React.FC<{ label: string, value: string, icon?: React.ReactNode, isEink: boolean }> = ({ label, value, icon, isEink }) => (
+  <div className={`p-4 rounded-3xl border transition-all duration-500 flex flex-col justify-between ${isEink ? 'bg-white border-black border-[1px]' : 'bg-white/5 border-white/5'}`}>
+    <div className="flex justify-between items-center mb-2 opacity-40">
+       <p className="text-[7px] uppercase tracking-[0.3em] font-bold">{label}</p>
+       {icon}
+    </div>
+    <p className={`text-base md:text-lg ${isEink ? 'font-serif font-black' : 'font-light'}`}>{value}</p>
   </div>
 );
 
