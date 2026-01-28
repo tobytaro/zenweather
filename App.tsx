@@ -183,7 +183,7 @@ const App: React.FC = () => {
   [activeWeather.condition, isEink]);
 
   const WeatherIcon = ({ condition, size = 48 }: { condition: WeatherCondition, size?: number }) => {
-    const props = { size, strokeWidth: 1, className: "opacity-40 mb-8" };
+    const props = { size, strokeWidth: 1, className: "opacity-40 mb-6 lg:mb-8" };
     switch (condition) {
       case 'clear': return <Sun {...props} />;
       case 'cloudy': return <Cloud {...props} />;
@@ -229,7 +229,7 @@ const App: React.FC = () => {
           </div>
           <div className="flex flex-col">
             <button onClick={() => setShowSearch(!showSearch)} className="group text-left">
-              <span className="text-xl md:text-2xl uppercase tracking-[0.3em] font-normal opacity-80 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+              <span className="text-lg md:text-xl uppercase tracking-[0.3em] font-normal opacity-80 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                 {formattedCity}
               </span>
             </button>
@@ -245,7 +245,7 @@ const App: React.FC = () => {
         </div>
       </header>
 
-      <main className="relative z-10 flex-grow flex flex-col items-center justify-center px-6 md:px-20 py-10">
+      <main className="relative z-10 flex-grow flex flex-col items-center justify-center px-6 md:px-20 py-8">
         <AnimatePresence>
           {showSearch && (
             <motion.div 
@@ -262,32 +262,32 @@ const App: React.FC = () => {
           )}
         </AnimatePresence>
 
-        <div className="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-32 items-center">
+        <div className="w-full max-w-5xl grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-24 items-center">
           <section className="flex flex-col items-center lg:items-start text-center lg:text-left">
-            <WeatherIcon condition={activeWeather.condition} size={72} />
-            <h2 className={`text-[10rem] md:text-[14rem] leading-[0.75] tracking-tighter ${isEink ? 'font-serif font-black' : 'font-[100]'}`}>
+            <WeatherIcon condition={activeWeather.condition} size={64} />
+            <h2 className={`text-[7rem] md:text-[10rem] leading-[0.75] tracking-tighter ${isEink ? 'font-serif font-black' : 'font-[100]'}`}>
               {Math.round(activeWeather.temp)}°
             </h2>
-            <h3 className={`mt-6 text-4xl md:text-7xl ${isEink ? 'font-serif font-black italic' : 'font-[200]'} tracking-[0.25em] uppercase opacity-70`}>
+            <h3 className={`mt-4 text-2xl md:text-5xl ${isEink ? 'font-serif font-black italic' : 'font-[200]'} tracking-[0.25em] uppercase opacity-70`}>
               {activeWeather.condition}
             </h3>
           </section>
 
-          <section className="flex flex-col gap-6 w-full max-w-md mx-auto lg:mx-0">
+          <section className="flex flex-col gap-5 w-full max-w-md mx-auto lg:mx-0">
             <TennisIndex weather={activeWeather} isEink={isEink} />
             <div className="grid grid-cols-2 gap-4">
-              <StatCard label="Wind" value={`${Math.round(activeWeather.windSpeed)} km/h`} icon={<Wind size={16} strokeWidth={1.5}/>} isEink={isEink} />
-              <StatCard label="Humidity" value={`${activeWeather.humidity}%`} icon={<Droplets size={16} strokeWidth={1.5}/>} isEink={isEink} />
-              <StatCard label="Sunrise" value={activeWeather.sunrise || "07:02"} icon={<Sunrise size={16} strokeWidth={1.5}/>} isEink={isEink} />
-              <StatCard label="Sunset" value={activeWeather.sunset || "18:08"} icon={<Sunset size={16} strokeWidth={1.5}/>} isEink={isEink} />
+              <StatCard label="Wind" value={`${Math.round(activeWeather.windSpeed)} km/h`} icon={<Wind size={14} strokeWidth={1.5}/>} isEink={isEink} />
+              <StatCard label="Humidity" value={`${activeWeather.humidity}%`} icon={<Droplets size={14} strokeWidth={1.5}/>} isEink={isEink} />
+              <StatCard label="Sunrise" value={activeWeather.sunrise || "07:02"} icon={<Sunrise size={14} strokeWidth={1.5}/>} isEink={isEink} />
+              <StatCard label="Sunset" value={activeWeather.sunset || "18:08"} icon={<Sunset size={14} strokeWidth={1.5}/>} isEink={isEink} />
             </div>
           </section>
         </div>
       </main>
 
-      <footer className="relative z-10 p-6 md:px-12 md:py-10 flex justify-between items-center text-[8px] uppercase tracking-[0.6em] opacity-30">
+      <footer className="relative z-10 p-6 md:px-12 md:py-10 flex justify-between items-center text-[7px] uppercase tracking-[0.6em] opacity-30">
         <div className="flex items-center gap-4">
-          <AtmoLogo className="w-3 h-3" />
+          <AtmoLogo className="w-2.5 h-2.5" />
           <span>SOURCE: OPEN-METEO</span>
         </div>
         
@@ -307,12 +307,12 @@ const HeaderAction: React.FC<{ children: React.ReactNode, onClick: () => void, a
 );
 
 const StatCard: React.FC<{ label: string, value: string, icon?: React.ReactNode, isEink: boolean }> = ({ label, value, icon, isEink }) => (
-  <div className={`p-6 md:p-8 rounded-[2.5rem] transition-all flex flex-col justify-between ${isEink ? 'bg-white border-black text-black border-2' : 'bg-stone-800/5'}`}>
-    <div className="flex justify-between items-start mb-6">
-      <p className="text-[10px] uppercase tracking-[0.3em] font-bold opacity-30">{label}</p>
+  <div className={`p-5 md:p-7 rounded-[2rem] transition-all flex flex-col justify-between ${isEink ? 'bg-white border-black text-black border-2' : 'bg-stone-800/5'}`}>
+    <div className="flex justify-between items-start mb-4">
+      <p className="text-[9px] uppercase tracking-[0.3em] font-bold opacity-30">{label}</p>
       <span className="opacity-30">{icon}</span>
     </div>
-    <p className={`text-3xl md:text-4xl ${isEink ? 'font-serif font-black' : 'font-[300]'} tracking-tight`}>{value}</p>
+    <p className={`text-2xl md:text-3xl ${isEink ? 'font-serif font-black' : 'font-[300]'} tracking-tight`}>{value}</p>
   </div>
 );
 
