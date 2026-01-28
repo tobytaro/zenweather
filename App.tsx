@@ -204,7 +204,6 @@ const App: React.FC = () => {
     );
   }
 
-  // Ensure consistent typography spacing for city names
   const formattedCity = activeWeather.location.split(',')[0].trim().toUpperCase();
 
   return (
@@ -224,13 +223,13 @@ const App: React.FC = () => {
 
       <header className="relative z-20 px-6 py-6 md:px-12 md:py-10 flex justify-between items-start w-full">
         <div className="flex flex-col">
-          <div className="flex items-center gap-2 mb-1">
-            <AtmoLogo className="w-3 h-3 opacity-30" />
-            <span className="text-[9px] uppercase tracking-[0.4em] opacity-30 font-bold">Atmosphere</span>
+          <div className="flex items-center gap-1.5 mb-0.5">
+            <AtmoLogo className="w-2.5 h-2.5 opacity-30" />
+            <span className="text-[8px] uppercase tracking-[0.5em] opacity-30 font-bold">Atmosphere</span>
           </div>
           <div className="flex flex-col">
             <button onClick={() => setShowSearch(!showSearch)} className="group text-left">
-              <span className="text-2xl md:text-3xl uppercase tracking-[0.2em] font-light opacity-80 group-hover:opacity-100 transition-opacity whitespace-nowrap">
+              <span className="text-xl md:text-2xl uppercase tracking-[0.3em] font-normal opacity-80 group-hover:opacity-100 transition-opacity whitespace-nowrap">
                 {formattedCity}
               </span>
             </button>
@@ -238,11 +237,11 @@ const App: React.FC = () => {
         </div>
 
         <div className="flex gap-4 pt-2">
-          <HeaderAction onClick={() => setShowSearch(!showSearch)} active={showSearch} isEink={isEink}><Search size={20} /></HeaderAction>
+          <HeaderAction onClick={() => setShowSearch(!showSearch)} active={showSearch} isEink={isEink}><Search size={18} /></HeaderAction>
           <HeaderAction onClick={() => handleLocate(true)} disabled={isLocating} isEink={isEink}>
-            <Navigation size={20} className={isLocating ? 'animate-spin' : ''} />
+            <Navigation size={18} className={isLocating ? 'animate-spin' : ''} />
           </HeaderAction>
-          <HeaderAction onClick={() => setIsEink(!isEink)} active={isEink} isEink={isEink}><Tablet size={20} /></HeaderAction>
+          <HeaderAction onClick={() => setIsEink(!isEink)} active={isEink} isEink={isEink}><Tablet size={18} /></HeaderAction>
         </div>
       </header>
 
@@ -279,8 +278,8 @@ const App: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <StatCard label="Wind" value={`${Math.round(activeWeather.windSpeed)} km/h`} icon={<Wind size={16} strokeWidth={1.5}/>} isEink={isEink} />
               <StatCard label="Humidity" value={`${activeWeather.humidity}%`} icon={<Droplets size={16} strokeWidth={1.5}/>} isEink={isEink} />
-              <StatCard label="Sunrise" value={activeWeather.sunrise || "06:58"} icon={<Sunrise size={16} strokeWidth={1.5}/>} isEink={isEink} />
-              <StatCard label="Sunset" value={activeWeather.sunset || "17:58"} icon={<Sunset size={16} strokeWidth={1.5}/>} isEink={isEink} />
+              <StatCard label="Sunrise" value={activeWeather.sunrise || "07:02"} icon={<Sunrise size={16} strokeWidth={1.5}/>} isEink={isEink} />
+              <StatCard label="Sunset" value={activeWeather.sunset || "18:08"} icon={<Sunset size={16} strokeWidth={1.5}/>} isEink={isEink} />
             </div>
           </section>
         </div>
@@ -302,18 +301,18 @@ const App: React.FC = () => {
 };
 
 const HeaderAction: React.FC<{ children: React.ReactNode, onClick: () => void, active?: boolean, disabled?: boolean, isEink: boolean }> = ({ children, onClick, active, disabled, isEink }) => (
-  <button onClick={onClick} disabled={disabled} className={`p-1.5 transition-all duration-300 ${disabled ? 'opacity-20 cursor-not-allowed' : 'opacity-40 hover:opacity-100'} ${active && !disabled ? 'opacity-100 scale-110' : ''}`}>
+  <button onClick={onClick} disabled={disabled} className={`p-1 transition-all duration-300 ${disabled ? 'opacity-20 cursor-not-allowed' : 'opacity-40 hover:opacity-100'} ${active && !disabled ? 'opacity-100 scale-110' : ''}`}>
     {children}
   </button>
 );
 
 const StatCard: React.FC<{ label: string, value: string, icon?: React.ReactNode, isEink: boolean }> = ({ label, value, icon, isEink }) => (
-  <div className={`p-6 rounded-[2rem] transition-all ${isEink ? 'bg-white border-black text-black border-2' : 'bg-stone-800/5'}`}>
-    <div className="flex justify-between items-center mb-4 opacity-30">
-      <p className="text-[10px] uppercase tracking-[0.3em] font-bold">{label}</p>
-      {icon}
+  <div className={`p-6 md:p-8 rounded-[2.5rem] transition-all flex flex-col justify-between ${isEink ? 'bg-white border-black text-black border-2' : 'bg-stone-800/5'}`}>
+    <div className="flex justify-between items-start mb-6">
+      <p className="text-[10px] uppercase tracking-[0.3em] font-bold opacity-30">{label}</p>
+      <span className="opacity-30">{icon}</span>
     </div>
-    <p className={`text-2xl md:text-3xl ${isEink ? 'font-serif font-black' : 'font-light'}`}>{value}</p>
+    <p className={`text-3xl md:text-4xl ${isEink ? 'font-serif font-black' : 'font-[300]'} tracking-tight`}>{value}</p>
   </div>
 );
 
