@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { motion } from 'framer-motion';
 import { WeatherCondition } from '../types';
@@ -5,7 +6,7 @@ import { WeatherCondition } from '../types';
 const WeatherAnimations: React.FC<{ condition: WeatherCondition; isEink: boolean }> = ({ condition, isEink }) => {
   if (condition === 'clear') return null;
   return (
-    <div className="fixed inset-0 z-0 pointer-events-none">
+    <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
       {condition === 'rainy' && (
         <div className="absolute inset-0 opacity-20">
           {Array.from({ length: 30 }).map((_, i) => (
@@ -27,7 +28,7 @@ const WeatherAnimations: React.FC<{ condition: WeatherCondition; isEink: boolean
               initial={{ opacity: Math.random(), scale: Math.random() * 0.5 + 0.5, top: `${Math.random() * 100}%`, left: `${Math.random() * 100}%` }}
               animate={{ opacity: [0.2, 1, 0.2] }}
               transition={{ duration: 2 + Math.random() * 4, repeat: Infinity, ease: "easeInOut", delay: Math.random() * 5 }}
-              className={`absolute w-1 h-1 rounded-full ${isEink ? 'bg-black' : 'bg-white/60'}`}
+              className={`absolute w-[2px] h-[2px] rounded-full ${isEink ? 'bg-black' : 'bg-white/60'}`}
             />
           ))}
         </div>

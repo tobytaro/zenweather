@@ -1,8 +1,9 @@
+
 import { WeatherCondition } from './types';
 
 export const ATMOSPHERIC_THEMES: Record<WeatherCondition, { gradient: string; text: string }> = {
   clear: {
-    gradient: 'from-[#FDFCFB] to-[#E2D1C3]',
+    gradient: 'from-[#f2ebe3] to-[#e6ded5]',
     text: 'text-stone-800'
   },
   cloudy: {
@@ -25,13 +26,13 @@ export const ATMOSPHERIC_THEMES: Record<WeatherCondition, { gradient: string; te
 
 export const MOCK_WEATHER: Record<string, any> = {
   current: {
-    temp: 22,
+    temp: 14,
     condition: 'clear',
-    location: 'Acquiring Location...',
-    windSpeed: 8,
-    humidity: 45,
+    location: 'MEIXIAN',
+    windSpeed: 7,
+    humidity: 68,
     precipitation: 0,
-    sunrise: "06:15",
-    sunset: "20:30"
+    sunrise: "06:58",
+    sunset: "17:58"
   }
 };
