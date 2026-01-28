@@ -21,19 +21,19 @@ const TennisIndex: React.FC<TennisIndexProps> = ({ weather, isEink }) => {
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 5 }}
+      initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
-      className={`p-5 md:p-6 rounded-3xl border transition-all duration-700
-        ${isEink ? 'bg-white border-black border-[1px] text-black' : 'bg-white/5 border-white/5'}`}
+      className={`p-6 md:p-8 rounded-[2.5rem] border transition-all duration-700
+        ${isEink ? 'bg-white border-black text-black border-2' : 'bg-white/5 border-white/5'}`}
     >
-      <div className="flex justify-between items-center mb-3">
-        <span className="text-[9px] uppercase tracking-[0.4em] font-bold opacity-30">Tennis Playability</span>
-        <span className={`text-[9px] font-bold uppercase tracking-[0.2em] ${isEink ? '' : 'opacity-60'}`}>
+      <div className="flex justify-between items-center mb-6">
+        <span className="text-[10px] uppercase tracking-[0.5em] font-bold opacity-30">Tennis Playability</span>
+        <span className={`text-[10px] font-bold uppercase tracking-[0.3em] ${isEink ? '' : 'opacity-60'}`}>
           {data.status}
         </span>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="h-[2px] w-full bg-current/10 relative overflow-hidden">
           <motion.div 
             initial={{ width: 0 }}
@@ -43,10 +43,10 @@ const TennisIndex: React.FC<TennisIndexProps> = ({ weather, isEink }) => {
           />
         </div>
         <div className="flex justify-between items-end">
-          <p className={`text-2xl md:text-3xl ${isEink ? 'font-serif font-black italic' : 'font-[200]'} tracking-tight`}>
+          <p className={`text-3xl md:text-4xl ${isEink ? 'font-serif font-black italic' : 'font-[200]'} tracking-tight`}>
             {data.label}
           </p>
-          <span className="text-[8px] opacity-40 uppercase tracking-[0.2em]">Sync {data.score}%</span>
+          <span className="text-[9px] opacity-40 uppercase tracking-[0.3em] pb-1">Sync {data.score}%</span>
         </div>
       </div>
     </motion.div>
